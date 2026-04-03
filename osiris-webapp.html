@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Osiris AI</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --os-navy:       #0d1b2e;
+  --os-gold:       #c9a84c;
+  --os-gold-light: #e8c96a;
+  --os-blue:       #2a6fff;
+  --os-msg-bg:     rgba(4, 8, 15, 0.82);
+}
+
+html, body {
+  width: 100%; height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+  user-select: none;
+}
+
+/* ═══════════════════════════════════════
+   TOP BAR
+═══════════════════════════════════════ */
+#os-topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: rgba(4, 8, 15, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(201,168,76,0.15);
+  z-index: 1000;
+}
+
+#os-topbar-title {
+  display: flex; align-items: center; gap: 8px;
+}
+#os-topbar-title .os-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #3bff7a; box-shadow: 0 0 6px #3bff7a;
+  animation: osPulse 2s infinite;
+  flex-shrink: 0;
+}
+@keyframes osPulse {
+  0%,100% { opacity:1; box-shadow:0 0 6px #3bff7a; }
+  50%      { opacity:0.4; box-shadow:none; }
+}
+#os-topbar-title span {
+  font-size: 9px; letter-spacing: 3px;
+  color: var(--os-gold); text-transform: uppercase;
+}
+
+#os-topbar-btns {
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* Toggle robot button */
+#os-toggle-robot {
+  height: 28px; padding: 0 10px;
+  background: rgba(201,168,76,0.08);
+  border: 1px solid rgba(201,168,76,0.3);
+  border-radius: 8px; color: var(--os-gold);
+  font-family: 'Courier New', monospace;
+  font-size: 8px; letter-spacing: 2px;
+  cursor: pointer; transition: all 0.2s;
+}
+#os-toggle-robot:hover, #os-toggle-robot:active {
+  background: rgba(201,168,76,0.18);
+  border-color: var(--os-gold-light);
+}
+#os-toggle-robot.hidden-mode {
+  color: rgba(201,168,76,0.5);
+}
+
+/* Close button */
+#os-close-btn {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: rgba(255,59,59,0.12);
+  border: 1px solid rgba(255,59,59,0.3);
+  color: #ff6b6b; font-size: 14px;
+  cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+  transition: all 0.2s;
+}
+#os-close-btn:hover, #os-close-btn:active {
+  background: rgba(255,59,59,0.25);
+  border-color: #ff6b6b;
+}
+
+/* ═══════════════════════════════════════
+   MAIN LAYOUT
+═══════════════════════════════════════ */
+#os-main {
+  position: fixed;
+  top: 44px; left: 0; right: 0; bottom: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════
+   ROBOT SECTION
+═══════════════════════════════════════ */
+#os-robot-section {
+  flex-shrink: 0;
+  position: relative;
+  height: 260px;
+  transition: height 0.4s cubic-bezier(0.16,1,0.3,1),
+              opacity 0.3s ease;
+  overflow: hidden;
+}
+#os-robot-section.collapsed {
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#os-canvas {
+  position: absolute; inset: 0;
+  width: 100% !important; height: 100% !important;
+  background: transparent;
+}
+
+#os-loading {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 10px;
+  pointer-events: none; transition: opacity 0.5s;
+}
+#os-loading.hidden { opacity: 0; }
+.os-loader-ring {
+  width: 32px; height: 32px;
+  border: 2px solid rgba(201,168,76,0.15);
+  border-top-color: var(--os-gold);
+  border-radius: 50%;
+  animation: osRing 0.8s linear infinite;
+}
+@keyframes osRing { to { transform: rotate(360deg); } }
+.os-loader-text {
+  font-size: 8px; letter-spacing: 3px;
+  color: rgba(201,168,76,0.5); text-transform: uppercase;
+}
+
+/* Status badge */
+#os-status-badge {
+  position: absolute; bottom: 10px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px; letter-spacing: 2px;
+  color: var(--os-gold); opacity: 0.5;
+  text-transform: uppercase; pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════
+   CHAT SECTION (завжди видима)
+═══════════════════════════════════════ */
+#os-chat-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: rgba(4, 8, 15, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(201,168,76,0.12);
+}
+
+#os-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(201,168,76,0.15) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+#os-messages::-webkit-scrollbar { width: 3px; }
+#os-messages::-webkit-scrollbar-track { background: transparent; }
+#os-messages::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.2); border-radius: 2px; }
+
+.os-msg {
+  max-width: 84%; padding: 9px 13px; border-radius: 12px;
+  font-size: 12px; line-height: 1.55;
+  animation: osMsgIn 0.25s ease;
+  word-break: break-word;
+}
+@keyframes osMsgIn {
+  from { opacity:0; transform:translateY(6px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+.os-msg.user {
+  align-self: flex-end;
+  background: rgba(201,168,76,0.12);
+  border: 1px solid rgba(201,168,76,0.25);
+  color: #e8d5a3;
+}
+.os-msg.bot {
+  align-self: flex-start;
+  background: rgba(13,27,46,0.85);
+  border: 1px solid rgba(42,111,255,0.2);
+  color: #a8c4e8;
+}
+.os-msg.typing { color: rgba(168,196,232,0.45); font-style: italic; }
+
+#os-input-row {
+  padding: 10px 12px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(201,168,76,0.1);
+  display: flex; gap: 8px; align-items: center;
+  flex-shrink: 0;
+  background: rgba(4, 8, 15, 0.4);
+}
+
+#os-input {
+  flex: 1;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(201,168,76,0.2);
+  border-radius: 10px;
+  padding: 9px 13px;
+  color: #e8d5a3;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+  -webkit-appearance: none;
+}
+#os-input:focus { border-color: rgba(201,168,76,0.5); }
+#os-input::placeholder { color: rgba(201,168,76,0.3); }
+
+#os-send-btn {
+  width: 38px; height: 38px; border-radius: 10px;
+  background: var(--os-gold); border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; flex-shrink: 0;
+}
+#os-send-btn:active {
+  background: var(--os-gold-light);
+  box-shadow: 0 0 12px rgba(201,168,76,0.5);
+  transform: scale(0.95);
+}
+#os-send-btn svg { width: 16px; height: 16px; fill: var(--os-navy); }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="os-topbar">
+  <div id="os-topbar-title">
+    <div class="os-dot"></div>
+    <span>OSIRIS · ACTIVE</span>
+  </div>
+  <div id="os-topbar-btns">
+    <button id="os-toggle-robot">ROBOT ▲</button>
+    <button id="os-close-btn">✕</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="os-main">
+
+  <!-- ROBOT -->
+  <div id="os-robot-section">
+    <canvas id="os-canvas"></canvas>
+    <div id="os-loading">
+      <div class="os-loader-ring"></div>
+      <div class="os-loader-text">INITIALIZING</div>
+    </div>
+    <div id="os-status-badge">OSIRIS · ONLINE</div>
+  </div>
+
+  <!-- CHAT (завжди видима) -->
+  <div id="os-chat-section">
+    <div id="os-messages"></div>
+    <div id="os-input-row">
+      <input id="os-input" type="text" placeholder="Введи запит..." autocomplete="off" autocorrect="off" spellcheck="false">
+      <button id="os-send-btn">
+        <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var WEBHOOK_URL = 'https://n8n.srv1421181.hstgr.cloud/webhook/osiris';
+
+  /* ── USER ID з Telegram WebApp ─────────────────────────────────── */
+  var userId;
+  try {
+    var tgUser = window.Telegram && Telegram.WebApp &&
+                 Telegram.WebApp.initDataUnsafe &&
+                 Telegram.WebApp.initDataUnsafe.user;
+    userId = tgUser ? String(tgUser.id) : null;
+  } catch(e) { userId = null; }
+
+  // Fallback якщо відкрито не в Telegram (для тесту)
+  if (!userId) {
+    userId = localStorage.getItem('osiris_webapp_user_id');
+    if (!userId) {
+      userId = 'webapp_' + Math.random().toString(36).substr(2, 10) + '_' + Date.now();
+      localStorage.setItem('osiris_webapp_user_id', userId);
+    }
+  }
+
+  /* ── TELEGRAM WEBAPP INIT ─────────────────────────────────────── */
+  try {
+    if (window.Telegram && Telegram.WebApp) {
+      Telegram.WebApp.ready();
+      Telegram.WebApp.expand();
+    }
+  } catch(e) {}
+
+  /* ── GLB ──────────────────────────────────────────────────────── */
+  var GLB = {
+    base:      'https://raw.githubusercontent.com/bogdangodluk22-art/osiris/main/Meshy_AI_Osiris_Robot.glb',
+    breathing: 'https://raw.githubusercontent.com/bogdangodluk22-art/osiris/main/Breathing%20Robot.glb',
+    touch:     'https://raw.githubusercontent.com/bogdangodluk22-art/osiris/main/touchscreen%20robot.glb'
+  };
+
+  /* ── STATE ────────────────────────────────────────────────────── */
+  var isTyping   = false;
+  var robotVisible = true;
+
+  var engine     = null;
+  var bbScene    = null;
+  var cache      = {};
+  var activeKey  = null;
+  var activeAnim = null;
+  var spinOn     = false;
+  var spinAngle  = 0;
+  var spinRoot   = null;
+
+  /* ── ELEMENTS ─────────────────────────────────────────────────── */
+  var robotSection  = document.getElementById('os-robot-section');
+  var toggleRobotBtn = document.getElementById('os-toggle-robot');
+  var closeBtn      = document.getElementById('os-close-btn');
+  var messagesEl    = document.getElementById('os-messages');
+  var inputEl       = document.getElementById('os-input');
+  var sendBtn       = document.getElementById('os-send-btn');
+  var canvasEl      = document.getElementById('os-canvas');
+  var loadingEl     = document.getElementById('os-loading');
+
+  /* ── INIT BABYLON ─────────────────────────────────────────────── */
+  function initBabylon() {
+    engine = new BABYLON.Engine(canvasEl, true, { alpha: true, preserveDrawingBuffer: true });
+    engine.setHardwareScalingLevel(1 / window.devicePixelRatio);
+
+    bbScene = new BABYLON.Scene(engine);
+    bbScene.clearColor = new BABYLON.Color4(0, 0, 0, 0);
+
+    var ip = bbScene.imageProcessingConfiguration;
+    ip.toneMappingEnabled = true;
+    ip.toneMappingType    = BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES;
+    ip.exposure           = 1.8;
+    ip.contrast           = 1.15;
+
+    var camera = new BABYLON.ArcRotateCamera('cam', -Math.PI/2, Math.PI/2, 3.0,
+      new BABYLON.Vector3(0, 0.8, 0), bbScene);
+    camera.lowerRadiusLimit = camera.upperRadiusLimit = 3.0;
+    camera.lowerBetaLimit   = camera.upperBetaLimit   = Math.PI / 2;
+    camera.inputs.clear();
+
+    var amb = new BABYLON.HemisphericLight('amb', new BABYLON.Vector3(0,1,0), bbScene);
+    amb.intensity   = 1.2;
+    amb.diffuse     = new BABYLON.Color3(1, 1, 1);
+    amb.groundColor = new BABYLON.Color3(0.05, 0.1, 0.25);
+
+    var dMain = new BABYLON.DirectionalLight('dMain', new BABYLON.Vector3(1,-2,-1), bbScene);
+    dMain.diffuse   = new BABYLON.Color3(1.0, 0.88, 0.55);
+    dMain.intensity = 3.0;
+
+    var dRim = new BABYLON.DirectionalLight('dRim', new BABYLON.Vector3(-1,-0.3,1.5), bbScene);
+    dRim.diffuse   = new BABYLON.Color3(0.25, 0.55, 1.0);
+    dRim.intensity = 2.2;
+
+    var pBlue = new BABYLON.PointLight('pBlue', new BABYLON.Vector3(-2,1.2,1), bbScene);
+    pBlue.diffuse   = new BABYLON.Color3(0.2, 0.5, 1.0);
+    pBlue.intensity = 3.0;
+    pBlue.range     = 8;
+
+    var pGold = new BABYLON.PointLight('pGold', new BABYLON.Vector3(0.3,-0.3,2.0), bbScene);
+    pGold.diffuse   = new BABYLON.Color3(1.0, 0.85, 0.4);
+    pGold.intensity = 2.0;
+    pGold.range     = 5;
+
+    engine.runRenderLoop(function() {
+      if (spinOn && spinRoot) {
+        spinAngle += 0.008;
+        spinRoot.rotation.y = spinAngle;
+      }
+      bbScene.render();
+    });
+
+    window.addEventListener('resize', function() { engine.resize(); });
+  }
+
+  /* ── LOAD + SHOW MODEL ────────────────────────────────────────── */
+  function showModel(key) {
+    if (cache[key]) { activate(key); return; }
+
+    BABYLON.SceneLoader.ImportMesh('', GLB[key], '', bbScene,
+      function(meshes, _p, _s, animGroups) {
+        var root = new BABYLON.Mesh('root_' + key, bbScene);
+        meshes.forEach(function(m) {
+          if (!m.parent) m.setParent(root);
+        });
+        animGroups.forEach(function(ag) { ag.stop(); });
+
+        setTimeout(function() {
+          bbScene.meshes.forEach(function(m) { m.computeWorldMatrix(true); });
+
+          var bb = root.getHierarchyBoundingVectors(true);
+          var h  = bb.max.y - bb.min.y;
+          var sc = (h > 0.01) ? 1.6 / h : 1.0;
+          root.scaling = new BABYLON.Vector3(sc, sc, sc);
+
+          bbScene.meshes.forEach(function(m) { m.computeWorldMatrix(true); });
+          bb = root.getHierarchyBoundingVectors(true);
+
+          var cx = (bb.max.x + bb.min.x) / 2;
+          var cz = (bb.max.z + bb.min.z) / 2;
+          root.position.x = -cx;
+          root.position.z = -cz;
+
+          var Y_OFFSET = { 'base': 0.6, 'breathing': -0.2, 'touch': -0.2 };
+          root.position.y = Y_OFFSET[key] !== undefined ? Y_OFFSET[key] : 0;
+
+          cache[key] = { root: root, animGroups: animGroups };
+          root.setEnabled(false);
+          activate(key);
+        }, 80);
+      },
+      null,
+      function(_, msg) { console.warn('GLB [' + key + ']:', msg); }
+    );
+  }
+
+  function activate(key) {
+    if (activeKey && activeKey !== key && cache[activeKey]) {
+      cache[activeKey].root.setEnabled(false);
+      if (activeAnim) { activeAnim.stop(); activeAnim = null; }
+    }
+    activeKey = key;
+    var e = cache[key];
+    e.root.setEnabled(true);
+    spinRoot = e.root;
+    e.root.rotation.y = spinOn ? spinAngle : Math.PI;
+    activeAnim = e.animGroups.length ? e.animGroups[0] : null;
+    if (activeAnim) activeAnim.start(true);
+    loadingEl.classList.add('hidden');
+  }
+
+  /* ── STARTUP: одразу активний стан ────────────────────────────── */
+  function startup() {
+    initBabylon();
+    spinOn = false; // дивиться лицем, не обертається
+    showModel('breathing');
+    addBot('Вітаю. Я Osiris — твій AI-асистент. Чим можу допомогти?');
+    setTimeout(function() { inputEl.focus(); }, 600);
+  }
+
+  /* ── TOGGLE ROBOT ─────────────────────────────────────────────── */
+  toggleRobotBtn.addEventListener('click', function() {
+    robotVisible = !robotVisible;
+    if (robotVisible) {
+      robotSection.classList.remove('collapsed');
+      toggleRobotBtn.textContent = 'ROBOT ▲';
+      toggleRobotBtn.classList.remove('hidden-mode');
+    } else {
+      robotSection.classList.add('collapsed');
+      toggleRobotBtn.textContent = 'ROBOT ▼';
+      toggleRobotBtn.classList.add('hidden-mode');
+    }
+  });
+
+  /* ── CLOSE (Telegram) ────────────────────────────────────────── */
+  closeBtn.addEventListener('click', function() {
+    try {
+      if (window.Telegram && Telegram.WebApp) {
+        Telegram.WebApp.close();
+      }
+    } catch(e) {
+      window.close();
+    }
+  });
+
+  /* ── SEND ─────────────────────────────────────────────────────── */
+  sendBtn.addEventListener('click', send);
+  inputEl.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+
+  function send() {
+    var text = inputEl.value.trim();
+    if (!text || isTyping) return;
+    inputEl.value = '';
+    isTyping = true;
+    addUser(text);
+    showModel('touch');
+    var el = addBot('...', true);
+
+    fetch(WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
+        source: 'webapp',
+        phone: userId
+      })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var reply = data.reply || 'Помилка відповіді.';
+      el.textContent = reply;
+      el.classList.remove('typing');
+    })
+    .catch(function() {
+      el.textContent = "Помилка з'єднання. Спробуй ще раз.";
+      el.classList.remove('typing');
+    })
+    .finally(function() {
+      isTyping = false;
+      showModel('breathing');
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    });
+  }
+
+  function addUser(text) {
+    var el = document.createElement('div');
+    el.className = 'os-msg user';
+    el.textContent = text;
+    messagesEl.appendChild(el);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return el;
+  }
+  function addBot(text, typing) {
+    var el = document.createElement('div');
+    el.className = 'os-msg bot' + (typing ? ' typing' : '');
+    el.textContent = text;
+    messagesEl.appendChild(el);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return el;
+  }
+
+  /* ── START ────────────────────────────────────────────────────── */
+  startup();
+
+})();
+</script>
+</body>
+</html>
